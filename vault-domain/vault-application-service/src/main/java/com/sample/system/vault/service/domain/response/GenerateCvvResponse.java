@@ -1,0 +1,6 @@
+package com.sample.system.vault.service.domain.response;
+
+public record GenerateCvvResponse(
+        String encryptedCvv,
+        String hashCvv
+){}
