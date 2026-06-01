@@ -1,0 +1,24 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: vault-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault-local
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+    command: >
+      vault server -dev
+      -dev-root-token-id=root-token
+      -dev-listen-address=0.0.0.0:8200
+
+volumes:
+  redis-data:
