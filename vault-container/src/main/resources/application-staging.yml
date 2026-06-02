@@ -1,0 +1,66 @@
+server:
+  port: 8012
+  ssl:
+    enabled: true
+    key-store: classpath:keystore.jks
+    key-store-type: JKS
+    key-store-password: changeit
+    key-password: changeit
+
+spring:
+  application:
+    name: vault-service
+
+  datasource:
+    url: jdbc:h2:file:./data/vault-db;MODE=Oracle
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+    hikari:
+      connection-timeout: 5000
+      initialization-fail-timeout: -1
+      maximum-pool-size: 1
+      minimum-idle: 0
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  flyway:
+    enabled: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+redisson:
+  singleServerConfig:
+    address: "redis://localhost:6379"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,info"
+    info:
+      enabled: true
+  info:
+    app:
+      name: Vault Service
+      version: 1.0.0
+      description: This is vault service API
+
+file:
+  storage:
+    path: uploads/

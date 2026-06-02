@@ -1,0 +1,87 @@
+server:
+  port: 8012
+  ssl:
+    enabled: true
+    key-store: classpath:keystore.jks
+    key-store-type: JKS
+    key-store-password: changeit
+    key-password: changeit
+
+spring:
+  application:
+    name: vault-service
+  datasource:
+    url: jdbc:h2:file:./data/vault-db;MODE=Oracle
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+    hikari:
+      connection-timeout: 5000
+      initialization-fail-timeout: -1
+      maximum-pool-size: 1
+      minimum-idle: 0
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+
+  h2:
+    console:
+      # The H2 web console is a local-dev convenience tool with no place in production.
+      enabled: false
+      path: /h2-console
+
+  flyway:
+    enabled: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+# Single-node Redis is fine for local/dev only. In production, point Redisson at a real
+# Redis Cluster or Sentinel deployment instead. Node addresses/credentials are
+# environment-specific; set them via env vars or a secret store.
+redisson:
+  singleServerConfig:
+    address: "redis://localhost:6379"
+  # clusterServersConfig:
+  #   nodeAddresses:
+  #     - "redis://__REDIS_NODE_1__:6379"
+  #     - "redis://__REDIS_NODE_2__:6379"
+  #     - "redis://__REDIS_NODE_3__:6379"
+  #   password: ""
+  # Alternative to a cluster - Sentinel:
+  # sentinelServersConfig:
+  #   masterName: mymaster
+  #   sentinelAddresses:
+  #     - "redis://__SENTINEL_1__:26379"
+  #     - "redis://__SENTINEL_2__:26379"
+  #   password: ""
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8003/eureka
+    register-with-eureka: true
+    fetch-registry: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,info"
+    info:
+      enabled: true
+  info:
+    app:
+      name: Vault Service
+      version: 1.0.0
+      description: This is vault service API
+file:
+  storage:
+    path: uploads/

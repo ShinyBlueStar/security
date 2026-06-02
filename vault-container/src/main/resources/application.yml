@@ -1,0 +1,132 @@
+server:
+  port: 8012
+  ssl:
+    enabled: true
+    key-store: classpath:keystore.jks
+    key-store-type: JKS
+    key-store-password: changeit
+    key-password: changeit
+
+#    enabled-protocols: TLSv1.2,TLSv1.3
+#    ciphers: TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384
+
+spring:
+  application:
+    name: vault-service
+
+  datasource:
+    url: jdbc:h2:file:./data/vault-db;MODE=Oracle
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+    hikari:
+      connection-timeout: 5000
+      initialization-fail-timeout: -1
+      maximum-pool-size: 1
+      minimum-idle: 0
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  flyway:
+    enabled: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+redisson:
+  singleServerConfig:
+    address: "redis://localhost:6379"
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8003/eureka
+    register-with-eureka: true
+    fetch-registry: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only health/info are exposed publicly (see SecurityConfig). Other endpoints
+        # (env, beans, heapdump, ...) can leak sensitive data and stay off by default.
+        include: "health,info"
+    info:
+      enabled: true
+  endpoint:
+    health:
+      show-details: when-authorized
+  info:
+    app:
+      name: Vault Service
+      version: 1.0.0
+      description: This is vault service API
+
+file:
+  storage:
+    path: uploads/
+
+app:
+  vault:
+    uri: //secure.vault.server:8200
+    # token:
+    roleId: ""
+    secretId: ""
+    transitMount: transit
+    # pinKey: pin-hmac-key
+    # cvv2Key: cvv2-cmac-key
+    # otpHmacKey: otp-hmac-key
+    # otpSharedSecretPath: secret/data/otp
+    # totpStepSeconds: 120
+    # totpDigits: 6
+    # totpAllowedDriftSteps: 1
+    # masterEncryptionKey:
+    # pinEncryptKey: pin-hmac-key
+    # cvv2EncryptKey: cvv2-cmac-key
+    # otpEncryptKey: otp-hmac-key
+
+# Required for SecurityConfig's JWT resource server; must point at a real issuer/JWKS
+# endpoint per environment. Set via env vars, never commit real values here.
+# spring:
+#   security:
+#     oauth2:
+#       resourceserver:
+#         jwt:
+#           issuer-uri: https://__YOUR_IDENTITY_PROVIDER__/
+#           # or, if you don't use OIDC discovery:
+#           # jwk-set-uri: https://__YOUR_IDENTITY_PROVIDER__/.well-known/jwks.json
+
+# Circuit breaker + retry wrapping every outbound Vault call (see VaultConfig / ResilientVaultOperations)
+resilience4j:
+  circuitbreaker:
+    instances:
+      vault:
+        sliding-window-size: 20
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+  retry:
+    instances:
+      vault:
+        max-attempts: 3
+        wait-duration: 200ms
+        retry-exceptions:
+          - org.springframework.vault.VaultException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
