@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.sample.system.vault.service.domain.ports.input.service.impl.OtpServiceImplTest
+-------------------------------------------------------------------------------
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.155 s -- in com.sample.system.vault.service.domain.ports.input.service.impl.OtpServiceImplTest

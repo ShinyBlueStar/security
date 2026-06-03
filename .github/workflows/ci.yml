@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    # com.pcp.banking.system:common-domain/common-application are private artifacts only
+    # resolvable through the internal Nexus, so this job (like docker-build below) needs
+    # a runner with network access to it - adjust `runs-on` for your environment - and
+    # these repository secrets configured: NEXUS_USERNAME, NEXUS_PASSWORD.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Write Maven settings (not committed)
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<EOF
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+            <servers>
+              <server>
+                <id>private-nexus</id>
+                <username>${NEXUS_USERNAME}</username>
+                <password>${NEXUS_PASSWORD}</password>
+              </server>
+            </servers>
+            <mirrors>
+              <mirror>
+                <id>internal_nexus</id>
+                <mirrorOf>*</mirrorOf>
+                <url>http://repo.bmicc.ir:8081/repository/maven-public/</url>
+              </mirror>
+            </mirrors>
+          </settings>
+          EOF
+        env:
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+
+      - name: Run tests
+        run: mvn -B -Pdevelopment test
+
+  docker-build:
+    # Builds the runtime image using a BuildKit secret mount for Nexus credentials (see
+    # vault-container/Dockerfile), so they never land in an image layer or build cache.
+    # Same runner/network requirement as the test job above.
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Write Maven settings (not committed, used only as a build secret)
+        run: |
+          cat > "${RUNNER_TEMP}/settings.xml" <<EOF
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+            <servers>
+              <server>
+                <id>private-nexus</id>
+                <username>${NEXUS_USERNAME}</username>
+                <password>${NEXUS_PASSWORD}</password>
+              </server>
+            </servers>
+            <mirrors>
+              <mirror>
+                <id>internal_nexus</id>
+                <mirrorOf>*</mirrorOf>
+                <url>http://repo.bmicc.ir:8081/repository/maven-public/</url>
+              </mirror>
+            </mirrors>
+          </settings>
+          EOF
+        env:
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: vault-container/Dockerfile
+          secrets: |
+            maven_settings=${{ runner.temp }}/settings.xml
+          tags: vault-service:${{ github.sha }}
+          push: false

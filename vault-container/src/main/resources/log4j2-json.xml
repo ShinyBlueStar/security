@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  JSON log layout for staging/production (see application-staging.yml / application-production.yml,
+  logging.config). One JSON object per line on stdout, ready for a log shipper (Filebeat, Fluentd,
+  Promtail, ...) to forward to a centralized store without custom parsing. Includes traceId/spanId
+  from Micrometer Tracing, which populates Log4j2's ThreadContext via the SLF4J MDC bridge.
+-->
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="ConsoleJson" target="SYSTEM_OUT">
+            <JsonTemplateLayout eventTemplateUri="classpath:JsonLayout.json">
+                <EventTemplateAdditionalField key="service" value="vault-service"/>
+            </JsonTemplateLayout>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Root level="INFO">
+            <AppenderRef ref="ConsoleJson"/>
+        </Root>
+    </Loggers>
+</Configuration>

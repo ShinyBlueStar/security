@@ -42,9 +42,10 @@ The project follows the Hexagonal (Ports & Adapters) pattern:
 - **Cache/session:** Redis + Redisson
 - **Service discovery:** Netflix Eureka Client (Spring Cloud)
 - **API docs:** springdoc-openapi (Swagger UI) with a Bearer/JWT security scheme
-- **Logging:** Log4j2 + an AOP-based logging aspect for request/response logging
+- **Logging:** Log4j2 + an AOP-based logging aspect for request/response logging; JSON-structured on `staging`/`production` (`log4j2-json.xml`)
+- **Metrics & tracing:** Micrometer with a Prometheus registry (`/actuator/prometheus`) and Micrometer Tracing (Brave + Zipkin reporter) for distributed request tracing
 - **Utilities:** Lombok, MapStruct, Vavr, Commons-Text
-- **Monitoring:** Spring Boot Actuator (with a custom `VaultInfoContributor`; only `health`/`info` are public)
+- **Monitoring:** Spring Boot Actuator (with a custom `VaultInfoContributor`; only `health`/`info` are public, the rest require authentication)
 - **Transport security:** HTTPS/TLS via a JKS keystore
 
 ---
@@ -140,7 +141,7 @@ Three profiles are defined at both the Maven and Spring level:
 ## Security & production readiness
 
 - **API authentication:** `SecurityConfig` is an OAuth2 Resource Server requiring a JWT bearer token on every endpoint except Swagger/OpenAPI, `/actuator/health`, `/actuator/info`, and (outside production) `/h2-console`. Authentication/authorization failures are returned in the same `BaseResponse`/`ErrorDetail` shape as the rest of the API (see `VaultSecurityResponses`). No identity provider is bundled with this project — `issuer-uri`/`jwk-set-uri` must point at a real one, or the app will refuse to start (see "Running locally" above).
-- **Actuator exposure** is limited to `health` and `info` across all profiles; `health` only shows full details to authenticated callers (`show-details: when-authorized`).
+- **Actuator exposure** is limited to `health`, `info`, `prometheus`, and `metrics` across all profiles; only `health`/`info` are unauthenticated, the rest need a valid bearer token like every other endpoint. `health` only shows full details to authenticated callers (`show-details: when-authorized`).
 - **Vault session handling:** `VaultConfig` uses a `LifecycleAwareSessionManager`, which renews the Vault session/token (or re-authenticates via AppRole) automatically instead of relying on a single static token for the process lifetime.
 - **Vault call resilience:** outbound calls to Vault go through a circuit breaker + retry (Resilience4j, instance name `vault`, tunable in `application.yml`); see `ResilientVaultOperations`.
 - **H2 console** is disabled on the `production` profile and only available on `development`/`staging`.
@@ -155,10 +156,35 @@ Three profiles are defined at both the Maven and Spring level:
 
 ---
 
-## Tests
+## Observability
 
-Run the unit tests:
+- **Metrics:** Prometheus-formatted metrics at `/actuator/prometheus` (bearer token required). Point a Prometheus server at it, or configure a scrape-specific credential/network restriction for the scraper.
+- **Tracing:** Micrometer Tracing (Brave) instruments incoming HTTP requests and outbound `RestTemplate` calls with trace/span IDs; `management.tracing.sampling.probability` (default `0.1`) controls the sample rate. Set a real collector via `management.zipkin.tracing.endpoint` (see `application.yml`, commented out by default) to actually export spans.
+- **Logs:** `development` keeps Spring Boot's default console pattern. `staging`/`production` use `log4j2-json.xml`, which writes one structured JSON object per line to stdout — including the `traceId`/`spanId` populated by Micrometer Tracing — so a log shipper (Filebeat, Fluentd, Promtail, ...) can forward it to a centralized store without custom parsing.
+
+---
+
+## Tests
 
 ```bash
 mvn test
+```
+
+Unit test coverage currently focuses on the domain services that handle sensitive card data: `CvvServiceImpl`, `PinServiceImpl`, `OtpServiceImpl`, `SessionServiceImpl`, and `StatusServiceImpl` (all in `vault-domain/vault-application-service`), covering both success paths and the domain exceptions each one raises. The REST/security layer (`VaultController`, `SecurityConfig`) has no automated test coverage yet.
+
+---
+
+## CI/CD
+
+`.github/workflows/ci.yml` defines two jobs:
+
+- **`test`** — runs `mvn test` on every push/PR to `main`.
+- **`docker-build`** — builds the image defined in `vault-container/Dockerfile` on pushes to `main`, using a Docker BuildKit secret mount for the Maven/Nexus credentials so they never end up baked into an image layer or the build cache (unlike passing them as plain `ARG`s).
+
+Both jobs need `NEXUS_USERNAME`/`NEXUS_PASSWORD` set as repository secrets, and a runner with network access to the internal Nexus/registry (`repo.bmicc.ir`, `hub.bmicc.ir`) — adjust `runs-on` in the workflow for your environment (e.g. a self-hosted runner) if `ubuntu-latest` can't reach them.
+
+To build the image locally with the same secret-mount approach:
+
+```bash
+docker build --secret id=maven_settings,src=/path/to/your/settings.xml -f vault-container/Dockerfile .
 ```
